@@ -1,3 +1,4 @@
+#docker 制作文件
 FROM python:3.6-stretch
 
 WORKDIR /app

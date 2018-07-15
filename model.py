@@ -2,6 +2,7 @@ import tensorlayer as tl
 import tensorflow as tf
 
 
+#  cnn模型
 def model():
     sess = tf.InteractiveSession()
 

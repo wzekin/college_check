@@ -7,6 +7,9 @@ Get_number = 400
 Get_url = 'http://query.bjeea.cn/captcha.jpg'
 
 def GetImgCode():
+    """
+    下载验证码 手动标记
+    """
     get_img_start = time.time()
     if os.path.isdir(Get_path):
         pass

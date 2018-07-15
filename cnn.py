@@ -9,7 +9,13 @@ from model import model
 
 sess, net, x, y_ = model()
 
+
 def convert2gray(img):
+    """
+    将彩色图片变为灰度图片
+    :param img:彩色图片 输入为np.array
+    :return: 一张灰度图片
+    """
     if len(img.shape) > 2:
         r, g, b = img[:, :, 0], img[:, :, 1], img[:, :, 2]
         gray = 0.2989 * r + 0.5870 * g + 0.1140 * b
@@ -19,6 +25,14 @@ def convert2gray(img):
 
 
 def text2vec(text):
+    """
+    将文字转化为向量
+    :param text: 文字 example： 7895
+    :return: 向量 example: [[0 0 0 0 0 0 0 0 0 1]
+                           [0 1 0 0 0 0 0 0 0 0]
+                           [0 0 0 0 0 1 0 0 0 0]
+                           [0 0 1 0 0 0 0 0 0 0]]
+    """
     text_len = len(text)
     if text_len > 4:
         raise ValueError('验证码最长4个字符')
@@ -45,6 +59,12 @@ def text2vec(text):
 
 
 def listImg(path):
+    """
+    读出目录下所有的图片
+    :param path: 目录
+    :return: x 图片数据
+             y label数据
+    """
     train_x, train_y = [], []
     imgs = os.listdir(path)
     l = len(imgs)
@@ -56,12 +76,10 @@ def listImg(path):
     return np.reshape(np.array(train_x), (l, 20, 60, 1)), np.array(train_y)
 
 
-
-
+# 开始训练
 if __name__ == '__main__':
     train_x, train_y = listImg('./img')
     val_x, val_y = listImg('./val')
-
 
     y = net.outputs
 

@@ -1,4 +1,4 @@
-#encoding=utf-8
+# encoding=utf-8
 import json, time, requests, os, sys
 from io import BytesIO
 import tensorlayer as tl
@@ -7,15 +7,20 @@ import numpy as np
 from PIL import Image
 from model import model
 
-EXAM_NO = os.getenv('EXAM_NO')
-EXAMINNE_NO = os.getenv('EXAMINNE_NO')
-MESSAGE_ADDRESS = 'http://127.0.0.1:5000'
-USERNAME = os.getenv('USERNAME')
+EXAM_NO = os.getenv('EXAM_NO')  # 准考证号
+EXAMINNE_NO = os.getenv('EXAMINNE_NO')  # 考生号
+MESSAGE_ADDRESS = 'http://127.0.0.1:5000'  # 微信接收地址
+USERNAME = os.getenv('USERNAME')  # 发送人USERNAME
 
 print('hello world')
 sys.stdout.flush()
 
+
 def sendMessage(message):
+    """
+    通过微信发送信息
+    :param message:信息文件
+    """
     requests.post(MESSAGE_ADDRESS, {'message': message, 'user': USERNAME})
 
 
@@ -26,10 +31,25 @@ y_op = tf.argmax(tf.reshape(y, [-1, 4, 10]), 2)
 
 
 def getCookie():
+    """
+    拿到网站的Cookie
+    :return: cookie
+    """
     return requests.get('http://query.bjeea.cn/queryService/rest/admission/110').cookies['JSESSIONID1']
 
 
 def get_capture(sess, net, x, y_op, headers):
+    """
+        请求网站验证码，并验证
+    :param sess:
+    :param net:
+    :param x:
+    :param y_op:
+    :param headers: 请求头
+    :return: 验证码
+    :return  验证码是否正确
+    """
+
     def convert2gray(img):
         if len(img.shape) > 2:
             r, g, b = img[:, :, 0], img[:, :, 1], img[:, :, 2]
@@ -53,6 +73,7 @@ def get_capture(sess, net, x, y_op, headers):
     return rp, test(rp)
 
 
+# 每分钟查血一次
 if __name__ == '__main__':
     headers = {'Cookie': 'JSESSIONID1=' + getCookie()}
     while True:
