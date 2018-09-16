@@ -1,11 +1,9 @@
 # encoding=utf-8
 import json, time, requests, os, sys
 from io import BytesIO
-import tensorlayer as tl
-import tensorflow as tf
 import numpy as np
 from PIL import Image
-from model import model
+from cnn import crack_capture
 
 EXAM_NO = os.getenv('EXAM_NO')  # 准考证号
 EXAMINNE_NO = os.getenv('EXAMINNE_NO')  # 考生号
@@ -24,11 +22,6 @@ def sendMessage(message):
     requests.post(MESSAGE_ADDRESS, {'message': message, 'user': USERNAME})
 
 
-sess, net, x, _ = model()
-y = net.outputs
-tl.files.load_and_assign_npz(sess, 'model.npz', net)
-y_op = tf.argmax(tf.reshape(y, [-1, 4, 10]), 2)
-
 
 def getCookie():
     """
@@ -38,13 +31,9 @@ def getCookie():
     return requests.get('http://query.bjeea.cn/queryService/rest/admission/110').cookies['JSESSIONID1']
 
 
-def get_capture(sess, net, x, y_op, headers):
+def get_capture(headers):
     """
         请求网站验证码，并验证
-    :param sess:
-    :param net:
-    :param x:
-    :param y_op:
     :param headers: 请求头
     :return: 验证码
     :return  验证码是否正确
@@ -64,22 +53,18 @@ def get_capture(sess, net, x, y_op, headers):
 
     Get_img = requests.get('http://query.bjeea.cn/captcha.jpg', headers=headers)
     img = Image.open(BytesIO(Get_img.content))
-    capture = np.reshape(convert2gray(np.array((img))), (1, 20, 60, 1))
-    predict = tl.utils.predict(sess, net, capture, x, y_op)
-    rp = ''
-    for i in predict[0]:
-        rp = rp + str(i)
-
-    return rp, test(rp)
+    capture = np.reshape(convert2gray(np.array((img))), (1, 20, 60))
+    predict = crack_capture(capture)
+    return predict, test(predict)
 
 
-# 每分钟查血一次
+# 每分钟查询一次
 if __name__ == '__main__':
     headers = {'Cookie': 'JSESSIONID1=' + getCookie()}
     while True:
         capture, test = '', ''
         while test != '{"status":"y", "info":"&nbsp;"}':
-            capture, test = get_capture(sess, net, x, y_op, headers)
+            capture, test = get_capture(headers)
 
         r = requests.post('http://query.bjeea.cn/queryService/rest/admission/110',
                           {'examNo': EXAM_NO, 'examinneNo': EXAMINNE_NO, 'captcha': capture, 'examId': '4865'},

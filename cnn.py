@@ -1,13 +1,13 @@
 import os
+import random
 
 import tensorflow as tf
 import numpy as np
 from PIL import Image
-import tensorlayer as tl
 
-from model import model
-
-sess, net, x, y_ = model()
+x_ = tf.placeholder(tf.float32, shape=[None, 20, 60], name='x')  # [batch_size, height, width, channels]
+y_ = tf.placeholder(tf.float32, shape=[None, 40], name='y_')
+keep_prob = tf.placeholder(tf.float32)
 
 
 def convert2gray(img):
@@ -73,32 +73,108 @@ def listImg(path):
             train_x.append(convert2gray(np.array(Image.open(os.path.join(path, img)))))
             train_y.append(text2vec(os.path.splitext(img)[0]))
 
-    return np.reshape(np.array(train_x), (l, 20, 60, 1)), np.array(train_y)
+    return np.reshape(np.array(train_x), (l, 20, 60)), np.array(train_y)
 
 
-# 开始训练
-if __name__ == '__main__':
+def capture_cnn(w_alpha=0.01, b_alpha=0.1):
+    x = tf.reshape(x_, [-1, 20, 60, 1])
+
+    w_c1 = tf.Variable(w_alpha * tf.random_normal([5, 5, 1, 64]))
+    b_c1 = tf.Variable(b_alpha * tf.random_normal([64]))
+    conv1 = tf.nn.relu(tf.nn.bias_add(tf.nn.conv2d(x, w_c1, strides=[1, 1, 1, 1], padding='SAME'), b_c1))
+    conv1 = tf.nn.avg_pool(conv1, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
+    conv1 = tf.nn.dropout(conv1, keep_prob)
+
+    w_c2 = tf.Variable(w_alpha * tf.random_normal([3, 3, 64, 128]))
+    b_c2 = tf.Variable(b_alpha * tf.random_normal([128]))
+    conv2 = tf.nn.relu(tf.nn.bias_add(tf.nn.conv2d(conv1, w_c2, strides=[1, 1, 1, 1], padding='SAME'), b_c2))
+    conv2 = tf.nn.avg_pool(conv2, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
+    conv2 = tf.nn.dropout(conv2, keep_prob)
+
+    w_c3 = tf.Variable(w_alpha * tf.random_normal([3, 3, 128, 256]))
+    b_c3 = tf.Variable(b_alpha * tf.random_normal([256]))
+    conv3 = tf.nn.relu(tf.nn.bias_add(tf.nn.conv2d(conv2, w_c3, strides=[1, 1, 1, 1], padding='SAME'), b_c3))
+    conv3 = tf.nn.avg_pool(conv3, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
+    conv3 = tf.nn.dropout(conv3, keep_prob)
+
+    w_d1 = tf.Variable(w_alpha * tf.random_normal([3 * 8 * 256, 256]))
+    b_d1 = tf.Variable(b_alpha * tf.random_normal([256]))
+    dense = tf.reshape(conv3, [-1, w_d1.get_shape().as_list()[0]])
+    dense = tf.nn.relu(tf.add(tf.matmul(dense, w_d1), b_d1))
+    dense = tf.nn.dropout(dense, keep_prob)
+
+    w_d2 = tf.Variable(w_alpha * tf.random_normal([256, 128]))
+    b_d2 = tf.Variable(b_alpha * tf.random_normal([128]))
+    dense = tf.nn.relu(tf.add(tf.matmul(dense, w_d2), b_d2))
+    dense = tf.nn.dropout(dense, keep_prob)
+
+    w_out = tf.Variable(w_alpha * tf.random_normal([128, 40]))
+    b_out = tf.Variable(b_alpha * tf.random_normal([40]))
+    out = tf.add(tf.matmul(dense, w_out), b_out)
+    return out
+
+
+def train_cnn():
     train_x, train_y = listImg('./img')
     val_x, val_y = listImg('./val')
 
-    y = net.outputs
+    def get_next_batch(batch_size=64):
+        batch_x = np.zeros([batch_size, 20, 60])
+        batch_y = np.zeros([batch_size, 40])
+        for i in range(batch_size):
+            a = random.randint(0, len(train_x) - 1)
+            batch_x[i], batch_y[i] = train_x[a], train_y[a]
+        return batch_x, batch_y
 
+    y = capture_cnn()
     cost = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=y, labels=y_))
     predict = tf.reshape(y, [-1, 4, 10])
     max_idx_p = tf.argmax(predict, 2)
     max_idx_l = tf.argmax(tf.reshape(y_, [-1, 4, 10]), 2)
     correct_pred = tf.equal(max_idx_p, max_idx_l)
     acc = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
-    train_params = net.all_params
-    train_op = tf.train.AdamOptimizer(learning_rate=0.0001).minimize(cost, var_list=train_params)
+    train_op = tf.train.AdamOptimizer(learning_rate=0.0001).minimize(cost)
 
-    # initialize all variables in the session
-    tl.layers.initialize_global_variables(sess)
+    saver = tf.train.Saver()
 
-    # print network information
-    net.print_params()
-    net.print_layers()
-    tl.utils.fit(sess, net, train_op, cost, train_x, train_y, x, y_, X_val=val_x, y_val=val_y, acc=acc, batch_size=20,
-                 n_epoch=500, print_freq=5)
-    tl.files.save_npz(net.all_params, name='model1.npz')
+    with tf.Session() as sess:
+        sess.run(tf.global_variables_initializer())
+
+        step = 0
+        while True:
+            batch_x, batch_y = get_next_batch(20)
+            _, loss_ = sess.run([train_op, cost], feed_dict={x_: batch_x, y_: batch_y, keep_prob: 0.5})
+
+            if step % 100 == 0:
+                print(step, loss_)
+                acc_ = sess.run(acc, feed_dict={x_: val_x, y_: val_y, keep_prob: 1})
+                print('acc:', acc_)
+                if acc_ > 0.95:
+                    break
+                if step % 1000 == 0:
+                    saver.save(sess, "./1.model", global_step=step)
+            step += 1
     sess.close()
+
+
+def name2vec(name):
+    ans = ""
+    for i in name:
+        ans += str(i)
+    return ans
+
+
+def crack_capture(image):
+    predict = tf.argmax(tf.reshape(output, [-1, 4, 10]), 2)
+    text_list = sess.run(predict, feed_dict={x_: image, keep_prob: 1})
+    vec = text_list[0].tolist()
+    return name2vec(vec)
+
+
+if __name__ == '__main__':
+    train_cnn()
+else:
+    output = capture_cnn()
+    saver = tf.train.Saver()
+    sess = tf.Session()
+    saver.restore(sess, tf.train.latest_checkpoint("."))
