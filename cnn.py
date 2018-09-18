@@ -4,10 +4,12 @@ import random
 import tensorflow as tf
 import numpy as np
 from PIL import Image
+from tensorflow.python.framework import graph_util
 
-x_ = tf.placeholder(tf.float32, shape=[None, 20, 60], name='x')  # [batch_size, height, width, channels]
 y_ = tf.placeholder(tf.float32, shape=[None, 40], name='y_')
-keep_prob = tf.placeholder(tf.float32)
+keep_prob = tf.placeholder(tf.float32, name="keep")
+
+x_ = tf.placeholder(tf.float32, shape=[None, 20, 60], name='input_x')  # [batch_size, height, width, channels]
 
 
 def convert2gray(img):
@@ -129,7 +131,7 @@ def train_cnn():
     y = capture_cnn()
     cost = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=y, labels=y_))
     predict = tf.reshape(y, [-1, 4, 10])
-    max_idx_p = tf.argmax(predict, 2)
+    max_idx_p = tf.argmax(predict, 2, name="pre")
     max_idx_l = tf.argmax(tf.reshape(y_, [-1, 4, 10]), 2)
     correct_pred = tf.equal(max_idx_p, max_idx_l)
     acc = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
@@ -138,8 +140,10 @@ def train_cnn():
     saver = tf.train.Saver()
 
     with tf.Session() as sess:
-        sess.run(tf.global_variables_initializer())
-
+        if os.path.exists("checkpoint"):
+            saver.restore(sess, tf.train.latest_checkpoint("."))
+        else:
+            sess.run(tf.global_variables_initializer())
         step = 0
         while True:
             batch_x, batch_y = get_next_batch(20)
@@ -149,26 +153,26 @@ def train_cnn():
                 print(step, loss_)
                 acc_ = sess.run(acc, feed_dict={x_: val_x, y_: val_y, keep_prob: 1})
                 print('acc:', acc_)
-                if acc_ > 0.95:
+                if acc_ > 0.90:
+                    saver.save(sess, "./model.ckpt", global_step=step)
                     break
                 if step % 1000 == 0:
-                    saver.save(sess, "./1.model", global_step=step)
+                    saver.save(sess, "./model.ckpt", global_step=step)
             step += 1
-    sess.close()
+        save_pb(sess)
 
 
-def name2vec(name):
-    ans = ""
-    for i in name:
-        ans += str(i)
-    return ans
-
-
-def crack_capture(image):
-    predict = tf.argmax(tf.reshape(output, [-1, 4, 10]), 2)
-    text_list = sess.run(predict, feed_dict={x_: image, keep_prob: 1})
-    vec = text_list[0].tolist()
-    return name2vec(vec)
+def save_pb(sess):
+    output_graph = "model.pb"
+    op = sess.graph.get_operations()
+    print(op[0].name)
+    output_graph_def = graph_util.convert_variables_to_constants(  # 模型持久化，将变量值固定
+        sess,
+        sess.graph.as_graph_def(),
+        ["input_x", "pre", "keep"]  # 需要保存节点的名字
+    )
+    with tf.gfile.GFile(output_graph, "wb") as f:  # 保存模型
+        f.write(output_graph_def.SerializeToString())  # 序列化输出
 
 
 if __name__ == '__main__':

@@ -3,7 +3,8 @@ import json, time, requests, os, sys
 from io import BytesIO
 import numpy as np
 from PIL import Image
-from cnn import crack_capture
+# from cnn import crack_capture
+from test import pre
 
 EXAM_NO = os.getenv('EXAM_NO')  # 准考证号
 EXAMINNE_NO = os.getenv('EXAMINNE_NO')  # 考生号
@@ -54,7 +55,7 @@ def get_capture(headers):
     Get_img = requests.get('http://query.bjeea.cn/captcha.jpg', headers=headers)
     img = Image.open(BytesIO(Get_img.content))
     capture = np.reshape(convert2gray(np.array((img))), (1, 20, 60))
-    predict = crack_capture(capture)
+    predict = pre(capture)
     return predict, test(predict)
 
 
