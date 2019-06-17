@@ -4,3 +4,4 @@ __pycache__
 torch.svg
 prof.cpu
 model.pb
+venv
